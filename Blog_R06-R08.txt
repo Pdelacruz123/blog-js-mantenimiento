@@ -1,0 +1,64 @@
+PROYECTO: Blog
+Mejoras solicitadas e implementadas (R06 a R08)
+
+==============================================================
+R06 - Busqueda y paginacion de publicaciones
+==============================================================
+Categoria: Rendimiento / Usabilidad
+
+Descripcion: Barra de busqueda en la pantalla principal que filtra
+las publicaciones por titulo, contenido o nombre del autor mientras
+el usuario escribe, resaltando las coincidencias. El feed ya no
+descarga todas las publicaciones de una vez: carga 5 por pagina y
+muestra un boton "Load more posts" con el contador "Showing X of Y
+posts".
+
+Prioridad: Alta
+
+Observaciones: Implementado y probado. GET /api/posts acepta los
+parametros q, author, limit (max. 50) y offset, y devuelve el total
+en la cabecera X-Total-Count. La busqueda no distingue mayusculas,
+trata "%" y "_" como texto literal y usa consultas parametrizadas
+(sin riesgo de inyeccion SQL). Cambios en backend/server.js y
+public/index.html. Capturas: R06_1 a R06_5.
+
+==============================================================
+R07 - Edicion de publicaciones en ventana modal con imagen
+==============================================================
+Categoria: Usabilidad
+
+Descripcion: El boton "Edit" abre una ventana dentro de la pagina
+con el titulo, el contenido y la imagen actual del post, en lugar de
+los cuadros prompt() del navegador. Permite cambiar o quitar la
+imagen con vista previa, y el post se actualiza en el feed sin
+recargar la pagina.
+
+Prioridad: Media
+
+Observaciones: Implementado y probado. PUT /api/posts/:id acepta
+multipart (campo image o remove_image=true) y sigue aceptando JSON.
+Valida titulo y contenido, y borra del disco la imagen reemplazada o
+eliminada (al eliminar un post tambien se borra su imagen). Si quien
+edita no es el autor, responde 403 sin dejar archivos huerfanos.
+Cambios en backend/server.js y public/index.html. Capturas: R07_1 a
+R07_3.
+
+==============================================================
+R08 - Perfil publico del autor
+==============================================================
+Categoria: Funcionalidad
+
+Descripcion: Al hacer clic en el nombre o la foto de un autor (en
+publicaciones o comentarios) se abre su perfil publico: foto, edad,
+genero, descripcion, numero de posts y comentarios, calificacion
+promedio recibida y la lista de sus publicaciones. Se agrega el
+boton "My Profile" en la pantalla principal.
+
+Prioridad: Media
+
+Observaciones: Implementado y probado. Nuevo endpoint GET
+/api/users/:id que muestra la edad en lugar de la fecha de
+nacimiento exacta y nunca expone la contrasena. Pantalla nueva
+public/profile.html. Los estilos y el selector de tema se movieron a
+public/css/app.css, public/js/theme.js y public/js/common.js para
+compartirlos entre pantallas. Capturas: R08_1 a R08_3.

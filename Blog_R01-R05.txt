@@ -1,0 +1,73 @@
+PROYECTO: Blog
+Cambios solicitados e implementados (R01 a R05)
+
+==============================================================
+R01 - Estrellas a los comentarios
+==============================================================
+Titulo: Calificacion con estrellas en comentarios
+
+Descripcion: Selector de 5 estrellas junto al cuadro de texto de cada
+comentario, para calificar de 1 a 5 (opcional) al comentar. La
+calificacion se muestra junto al comentario ya publicado (ej. ****-).
+
+Prioridad: Media
+
+Observaciones: Implementado y probado. Columna comments.rating
+(1 a 5) en la base de datos, validacion en el backend y selector de
+estrellas en public/index.html.
+
+==============================================================
+R02 - Agregar imagenes en los Post
+==============================================================
+Titulo: Imagen opcional en las publicaciones
+
+Descripcion: Adjuntar una imagen al crear una publicacion y mostrarla
+dentro del post en el feed principal.
+
+Prioridad: Alta
+
+Observaciones: Implementado y probado. Columna posts.image_url,
+subida de archivos (max 5MB, solo imagenes) y vista previa antes de
+publicar en public/create-post.html.
+
+==============================================================
+R03 - Agregar foto de perfil
+==============================================================
+Titulo: Foto de perfil del usuario
+
+Descripcion: El usuario puede subir una foto que se usa como su
+avatar en sus publicaciones y comentarios, en vez del icono con su
+inicial.
+
+Prioridad: Media
+
+Observaciones: Implementado y probado. Columna users.profile_picture
+y endpoint para subir/guardar la foto; se muestra en public/index.html.
+
+==============================================================
+R04 - Pantalla editar perfil
+==============================================================
+Titulo: Pantalla "Editar perfil"
+
+Descripcion: Pantalla nueva donde el usuario ve y edita los datos de
+su perfil, accesible desde un boton en la pantalla principal.
+
+Prioridad: Alta
+
+Observaciones: Implementado y probado. Pantalla nueva
+public/edit-profile.html; boton "Edit Profile" agregado en
+public/index.html.
+
+==============================================================
+R05 - Editar perfil (fecha de nacimiento, genero, descripcion)
+==============================================================
+Titulo: Campos adicionales de perfil
+
+Descripcion: Fecha de nacimiento, genero y descripcion como campos
+editables dentro de la pantalla de editar perfil.
+
+Prioridad: Media
+
+Observaciones: Implementado y probado. Columnas users.birth_date,
+users.gender y users.description; campos correspondientes agregados
+en public/edit-profile.html.
