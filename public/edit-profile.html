@@ -1,0 +1,173 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Edit Profile</title>
+    <link rel="stylesheet" href="https://maxcdn.bootstrapcdn.com/bootstrap/4.5.2/css/bootstrap.min.css">
+    <style>
+        body { background: #f4f6fb; }
+        .profile-card {
+            max-width: 520px;
+            margin: 3rem auto;
+            background: #fff;
+            border-radius: 18px;
+            box-shadow: 0 1px 3px rgba(16,24,40,.06), 0 8px 24px rgba(16,24,40,.06);
+            padding: 2rem 2.25rem;
+        }
+        .avatar-picker { display: flex; align-items: center; gap: 1.25rem; margin-bottom: 1.5rem; }
+        .avatar-preview {
+            width: 88px;
+            height: 88px;
+            border-radius: 50%;
+            object-fit: cover;
+            background: #4f46e5;
+            display: grid;
+            place-items: center;
+            color: #fff;
+            font-size: 2rem;
+            font-weight: 600;
+            flex: none;
+        }
+    </style>
+</head>
+<body>
+<div class="profile-card">
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <h2 class="mb-0">Edit Profile</h2>
+        <a href="index.html">&larr; Back to blog</a>
+    </div>
+
+    <form id="profileForm">
+        <div class="avatar-picker">
+            <img id="avatarPreview" class="avatar-preview" style="display:none;">
+            <div id="avatarInitial" class="avatar-preview">?</div>
+            <div>
+                <label class="btn btn-outline-secondary btn-sm mb-0" for="profile_picture">Change photo</label>
+                <input type="file" id="profile_picture" accept="image/*" style="display:none;">
+                <div class="text-muted small mt-1">JPG or PNG, up to 5MB.</div>
+            </div>
+        </div>
+
+        <div class="form-group">
+            <label for="birth_date">Date of birth</label>
+            <input type="date" class="form-control" id="birth_date">
+        </div>
+
+        <div class="form-group">
+            <label for="gender">Gender</label>
+            <select class="form-control" id="gender">
+                <option value="">Prefer not to say</option>
+                <option value="female">Female</option>
+                <option value="male">Male</option>
+                <option value="other">Other</option>
+            </select>
+        </div>
+
+        <div class="form-group">
+            <label for="location">Location</label>
+            <input type="text" class="form-control" id="location" maxlength="100" placeholder="e.g. Lima, Peru">
+        </div>
+
+        <div class="form-group">
+            <label for="occupation">Occupation</label>
+            <input type="text" class="form-control" id="occupation" maxlength="100" placeholder="e.g. Software engineering student">
+        </div>
+
+        <div class="form-group">
+            <label for="website">Website</label>
+            <input type="url" class="form-control" id="website" maxlength="255" placeholder="https://...">
+        </div>
+
+        <div class="form-group">
+            <label for="description">About you</label>
+            <textarea class="form-control" id="description" rows="4" maxlength="500" placeholder="Tell others a bit about yourself..."></textarea>
+        </div>
+
+        <button type="submit" class="btn btn-primary">Save changes</button>
+        <span id="profileMessage" class="ml-2"></span>
+    </form>
+</div>
+
+<script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
+<script>
+    const token = localStorage.getItem('token');
+    if (!token) {
+        window.location.href = 'login.html';
+    }
+
+    let selectedFile = null;
+
+    function renderAvatar(url, username) {
+        if (url) {
+            $('#avatarPreview').attr('src', url).show();
+            $('#avatarInitial').hide();
+        } else {
+            $('#avatarPreview').hide();
+            $('#avatarInitial').text((username || '?').charAt(0).toUpperCase()).show();
+        }
+    }
+
+    // Load the current profile to pre-fill the form
+    $.ajax({
+        url: '/api/profile',
+        type: 'GET',
+        headers: { 'Authorization': `Bearer ${token}` },
+        success: function(profile) {
+            $('#birth_date').val(profile.birth_date ? profile.birth_date.substring(0, 10) : '');
+            $('#gender').val(profile.gender || '');
+            $('#description').val(profile.description || '');
+            $('#location').val(profile.location || '');
+            $('#occupation').val(profile.occupation || '');
+            $('#website').val(profile.website || '');
+            renderAvatar(profile.profile_picture, profile.username);
+        },
+        error: function(xhr) {
+            if (xhr.status === 401 || xhr.status === 403) {
+                window.location.href = 'login.html';
+            } else {
+                $('#profileMessage').text('Could not load your profile.').removeClass('text-success').addClass('text-danger');
+            }
+        }
+    });
+
+    // Preview the newly picked photo immediately
+    $('#profile_picture').on('change', function() {
+        selectedFile = this.files[0] || null;
+        if (!selectedFile) return;
+        const reader = new FileReader();
+        reader.onload = e => renderAvatar(e.target.result, '');
+        reader.readAsDataURL(selectedFile);
+    });
+
+    $('#profileForm').submit(function(e) {
+        e.preventDefault();
+
+        const formData = new FormData();
+        formData.append('birth_date', $('#birth_date').val());
+        formData.append('gender', $('#gender').val());
+        formData.append('description', $('#description').val());
+        formData.append('location', $('#location').val());
+        formData.append('occupation', $('#occupation').val());
+        formData.append('website', $('#website').val());
+        if (selectedFile) formData.append('profile_picture', selectedFile);
+
+        $.ajax({
+            url: '/api/profile',
+            type: 'PUT',
+            headers: { 'Authorization': `Bearer ${token}` },
+            data: formData,
+            processData: false,
+            contentType: false,
+            success: function() {
+                $('#profileMessage').text('Profile updated!').removeClass('text-danger').addClass('text-success');
+            },
+            error: function(xhr) {
+                const message = xhr.responseJSON?.message || xhr.statusText;
+                $('#profileMessage').text('Error: ' + message).removeClass('text-success').addClass('text-danger');
+            }
+        });
+    });
+</script>
+</body>
+</html>

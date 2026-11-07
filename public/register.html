@@ -1,0 +1,60 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Register</title>
+    <link rel="stylesheet" href="https://maxcdn.bootstrapcdn.com/bootstrap/4.5.2/css/bootstrap.min.css">
+</head>
+<body class="bg-light">
+<div class="container">
+    <h2 class="my-4">Register</h2>
+    <form id="registerForm">
+        <div class="form-group">
+            <label for="username">Username</label>
+            <input type="text" class="form-control" id="username" required>
+        </div>
+        <div class="form-group">
+            <label for="password">Password</label>
+            <input type="password" class="form-control" id="password" required>
+        </div>
+        <button type="submit" class="btn btn-primary">Register</button>
+    </form>
+    <div id="registerMessage" class="mt-3"></div>
+</div>
+<script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
+<script>
+    $('#registerForm').submit(function(e) {
+        e.preventDefault();
+        const username = $('#username').val();
+        const password = $('#password').val();
+
+        $.ajax({
+            url: 'http://localhost:5001/api/register',
+            type: 'POST',
+            contentType: 'application/json',
+            data: JSON.stringify({ username, password }),
+            success: function(response) {
+                $('#registerMessage').text(response.message).removeClass('text-danger').addClass('text-success');
+
+                // Store the token and userId in localStorage for authentication
+                localStorage.setItem('token', response.token);
+                localStorage.setItem('userId', response.userId); // Store userId as well
+
+                // Redirect to index.html after successful registration
+                setTimeout(function() {
+                    window.location.href = 'index.html';
+                }, 1500); // Redirect after 1.5 seconds to show success message
+            },
+            error: function(xhr) {
+                let errorMessage = 'Error registering user';
+                if (xhr.responseText) {
+                    errorMessage = `${errorMessage}: ${xhr.responseText}`;
+                }
+                $('#registerMessage').text(errorMessage).removeClass('text-success').addClass('text-danger');
+            }
+        });
+    });
+</script>
+</body>
+</html>

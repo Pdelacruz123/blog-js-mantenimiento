@@ -1,0 +1,109 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Profile</title>
+    <link rel="stylesheet" href="https://maxcdn.bootstrapcdn.com/bootstrap/4.5.2/css/bootstrap.min.css">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="css/app.css">
+    <script src="js/theme.js"></script>
+</head>
+<body>
+<header class="hero profile-hero">
+    <a href="index.html" class="back-link">&larr; Back to blog</a>
+    <h1 class="h3 mb-0">Author profile</h1>
+</header>
+
+<main class="feed">
+    <section id="profileCard" class="profile-card">
+        <p class="comments-empty pt-5">Loading profile...</p>
+    </section>
+
+    <h2 id="postsTitle" class="feed-title" hidden></h2>
+    <div id="userPosts"></div>
+</main>
+
+<script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
+<script src="js/common.js"></script>
+<script src="js/notifications.js"></script>
+<script>
+    $(document).ready(function() {
+        const profileId = new URLSearchParams(window.location.search).get('id');
+        const myId = localStorage.getItem('userId');
+        const genderLabels = { female: 'Female', male: 'Male', other: 'Other' };
+
+        function showError(message) {
+            $('#profileCard').html(`<p class="comments-empty pt-5">${esc(message)} <a href="index.html">Back to blog</a></p>`);
+        }
+
+        if (!profileId) {
+            showError('No user selected.');
+            return;
+        }
+
+        function stat(value, label) {
+            return `<div class="stat"><div class="num">${value}</div><div class="lbl">${label}</div></div>`;
+        }
+
+        $.get(`/api/users/${encodeURIComponent(profileId)}`, function(user) {
+            document.title = `${user.username} · Profile`;
+            const meta = [];
+            if (user.age !== null) meta.push(`${user.age} years old`);
+            if (genderLabels[user.gender]) meta.push(genderLabels[user.gender]);
+            const details = [];
+            if (user.occupation) details.push(`&#128188; ${esc(user.occupation)}`);
+            if (user.location) details.push(`&#128205; ${esc(user.location)}`);
+            if (user.website) {
+                const label = user.website.replace(/^https?:\/\//i, '').replace(/\/$/, '');
+                details.push(`&#128279; <a href="${esc(user.website)}" target="_blank" rel="noopener noreferrer nofollow">${esc(label)}</a>`);
+            }
+
+            $('#profileCard').html(`
+                ${avatar(user.username, user.profile_picture, 'xl')}
+                <div class="profile-name">${esc(user.username)}</div>
+                ${meta.length ? `<div class="profile-meta">${meta.map(esc).join(' &middot; ')}</div>` : ''}
+                ${details.length ? `<div class="profile-details">${details.map(d => `<span>${d}</span>`).join('')}</div>` : ''}
+                <p class="profile-bio">${user.description ? `&ldquo;${esc(user.description)}&rdquo;` : 'This user has not written a description yet.'}</p>
+                <div class="profile-stats">
+                    ${stat(user.post_count, user.post_count === 1 ? 'Post' : 'Posts')}
+                    ${stat(user.comment_count, user.comment_count === 1 ? 'Comment' : 'Comments')}
+                    ${stat(user.avg_rating !== null ? `<span class="star">&#9733;</span> ${user.avg_rating.toFixed(1)}` : '&ndash;', 'Avg. rating received')}
+                </div>
+                ${String(user.id) === myId ? '<div class="profile-actions"><a href="edit-profile.html" class="btn btn-brand btn-sm">Edit my profile</a></div>' : ''}
+            `);
+
+            $('#postsTitle').text(`Posts by ${user.username}`).prop('hidden', false);
+            loadUserPosts(user);
+        }).fail(function(xhr) {
+            showError(xhr.status === 404 ? 'This user does not exist.' : 'Could not load this profile.');
+        });
+
+        function loadUserPosts(user) {
+            $.get('/api/posts', { author: user.id, limit: 50 }, function(posts) {
+                if (posts.length === 0) {
+                    $('#userPosts').html(`<div class="empty-state"><p class="mb-0">${esc(user.username)} has not published anything yet.</p></div>`);
+                    return;
+                }
+                $('#userPosts').html(posts.map(post => `
+                    <a class="mini-post" href="${esc(postUrl(post.id))}">
+                        ${post.image_url ? `<img src="${esc(post.image_url)}" alt="">` : ''}
+                        <div class="body">
+                            <div class="title">${esc(post.title)}</div>
+                            <div class="excerpt">${esc(post.content)}</div>
+                            <div class="meta">${timeAgo(post.created_at)}</div>
+                            <div class="post-stats">
+                                <span>&#128172; ${post.comment_count} comment${post.comment_count === 1 ? '' : 's'}</span>
+                                <span>${ratingSummary(post) || '<span class="muted">No ratings yet</span>'}</span>
+                            </div>
+                        </div>
+                    </a>
+                `).join(''));
+            });
+        }
+    });
+</script>
+</body>
+</html>
