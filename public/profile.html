@@ -28,6 +28,7 @@
 
 <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
 <script src="js/common.js"></script>
+<script src="js/navbar.js"></script>
 <script src="js/notifications.js"></script>
 <script>
     $(document).ready(function() {
@@ -92,8 +93,9 @@
                         ${post.image_url ? `<img src="${esc(post.image_url)}" alt="">` : ''}
                         <div class="body">
                             <div class="title">${esc(post.title)}</div>
-                            <div class="excerpt">${esc(post.content)}</div>
-                            <div class="meta">${timeAgo(post.created_at)}</div>
+                            <div class="excerpt">${esc(plainText(post.content))}</div>
+                            ${tagChips(post.tags, false)}
+                            <div class="meta">${timeAgo(post.created_at)} &middot; ${readingTime(post.content)}</div>
                             <div class="post-stats">
                                 <span>&#128172; ${post.comment_count} comment${post.comment_count === 1 ? '' : 's'}</span>
                                 <span>${ratingSummary(post) || '<span class="muted">No ratings yet</span>'}</span>

@@ -3,82 +3,129 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Create Post</title>
+    <title>New Post</title>
     <link rel="stylesheet" href="https://maxcdn.bootstrapcdn.com/bootstrap/4.5.2/css/bootstrap.min.css">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/quill@2.0.3/dist/quill.snow.css">
+    <link rel="stylesheet" href="css/app.css">
+    <script src="js/theme.js"></script>
 </head>
-<body class="bg-light">
-<div class="container">
-    <h2 class="my-4">Create a New Post</h2>
-    <form id="postForm">
-        <div class="form-group">
-            <label for="title">Title</label>
-            <input type="text" class="form-control" id="title" required>
+<body>
+<main class="page">
+    <h1 class="page-title">Write a new post</h1>
+    <p class="page-sub">Format your text, add tags so people can find it, and an optional cover image.</p>
+
+    <form id="postForm" class="editor-card" novalidate>
+        <div class="field">
+            <label for="title" class="sr-only">Title</label>
+            <input type="text" id="title" class="title-input" placeholder="Post title" maxlength="200" required>
         </div>
-        <div class="form-group">
-            <label for="content">Content</label>
-            <textarea class="form-control" id="content" rows="5" required></textarea>
+
+        <div class="field">
+            <span class="field-label">Content</span>
+            <div id="editor"></div>
+            <div class="editor-meta"><span id="wordCount"></span></div>
         </div>
-        <div class="form-group">
-            <label for="image">Image (optional)</label>
-            <input type="file" class="form-control-file" id="image" accept="image/*">
-            <img id="imagePreview" class="mt-2 img-fluid rounded" style="display:none; max-height:280px;">
+
+        <div class="field">
+            <label for="tagsInput" class="field-label">Tags <span class="hint">(up to 5, press Enter or comma)</span></label>
+            <div class="tag-input" id="tagBox">
+                <input type="text" id="tagsInput" list="tagSuggestions" autocomplete="off">
+            </div>
+            <datalist id="tagSuggestions"></datalist>
         </div>
-        <button type="submit" class="btn btn-primary">Submit</button>
-        <a href="index.html" class="btn btn-link">Cancel</a>
+
+        <div class="field">
+            <span class="field-label">Cover image (optional)</span>
+            <div class="drop-zone">
+                <img id="imagePreview" alt="" hidden>
+                <label for="image" class="btn-soft">Choose image</label>
+                <input type="file" id="image" accept="image/*" hidden>
+                <button type="button" id="clearImage" class="btn-soft" hidden>Remove</button>
+                <span class="hint">JPG or PNG, up to 5MB.</span>
+            </div>
+        </div>
+
+        <div class="form-actions">
+            <span id="postMessage" class="form-message" role="status"></span>
+            <a href="index.html" class="btn btn-ghost">Cancel</a>
+            <button type="submit" id="submitBtn" class="btn btn-brand">Publish</button>
+        </div>
     </form>
-    <div id="postMessage" class="mt-3"></div>
-</div>
+</main>
+
 <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/quill@2.0.3/dist/quill.js"></script>
+<script src="js/common.js"></script>
+<script src="js/editor.js"></script>
+<script src="js/navbar.js"></script>
+<script src="js/notifications.js"></script>
 <script>
-    // Preview the selected image before uploading
-    $('#image').on('change', function() {
-        const file = this.files[0];
-        const preview = $('#imagePreview');
-        if (!file) {
-            preview.hide().attr('src', '');
-            return;
-        }
-        const reader = new FileReader();
-        reader.onload = e => preview.attr('src', e.target.result).show();
-        reader.readAsDataURL(file);
-    });
-
-    $('#postForm').submit(function(e) {
-        e.preventDefault();
+    $(function() {
         const token = localStorage.getItem('token');
-
-        // Check if the user is logged in
         if (!token) {
-            $('#postMessage').text('You need to log in to create a post.').removeClass('text-success').addClass('text-danger');
+            window.location.href = 'login.html';
             return;
         }
 
-        const formData = new FormData();
-        formData.append('title', $('#title').val());
-        formData.append('content', $('#content').val());
-        const imageFile = $('#image')[0].files[0];
-        if (imageFile) formData.append('image', imageFile);
+        const editor = createEditor('#editor', '#wordCount');
+        const tagInput = createTagInput('#tagBox');
 
-        $.ajax({
-            url: '/api/posts',
-            type: 'POST',
-            headers: { 'Authorization': `Bearer ${token}` },
-            data: formData,
-            processData: false,
-            contentType: false,
-            success: function(response) {
-                $('#postMessage').text('Post created successfully! Redirecting...').removeClass('text-danger').addClass('text-success');
+        function showMessage(text, ok) {
+            $('#postMessage').text(text).toggleClass('ok', !!ok).toggleClass('error', !ok);
+        }
 
-                // Redirect to index.html after successful post creation
-                setTimeout(function() {
-                    window.location.href = 'index.html';
-                }, 1500); // Delay to show the success message
-            },
-            error: function(xhr) {
-                const message = xhr.responseJSON?.message || xhr.statusText;
-                $('#postMessage').text('Error creating post: ' + message).removeClass('text-success').addClass('text-danger');
-                console.error('Error creating post:', message);
-            }
+        // Preview the selected image before uploading
+        $('#image').on('change', function() {
+            const file = this.files[0];
+            if (!file) return;
+            const reader = new FileReader();
+            reader.onload = e => $('#imagePreview').attr('src', e.target.result).prop('hidden', false);
+            reader.readAsDataURL(file);
+            $('#clearImage').prop('hidden', false);
+        });
+        $('#clearImage').on('click', function() {
+            $('#image').val('');
+            $('#imagePreview').prop('hidden', true).attr('src', '');
+            $(this).prop('hidden', true);
+        });
+
+        $('#postForm').on('submit', function(e) {
+            e.preventDefault();
+            const title = $('#title').val().trim();
+            if (!title) return showMessage('Add a title.');
+            if (editor.isEmpty()) return showMessage('Write something in the post.');
+
+            const formData = new FormData();
+            formData.append('title', title);
+            formData.append('content', editor.getHtml());
+            formData.append('tags', tagInput.get().join(','));
+            const imageFile = $('#image')[0].files[0];
+            if (imageFile) formData.append('image', imageFile);
+
+            $('#submitBtn').prop('disabled', true).text('Publishing...');
+            $.ajax({
+                url: '/api/posts',
+                type: 'POST',
+                headers: { 'Authorization': `Bearer ${token}` },
+                data: formData,
+                processData: false,
+                contentType: false,
+                success: function(post) {
+                    showMessage('Published! Opening your post...', true);
+                    setTimeout(() => { window.location.href = `index.html?post=${post.id}`; }, 800);
+                },
+                error: function(xhr) {
+                    if (xhr.status === 401 || xhr.status === 403) {
+                        showMessage('Your session expired. Log in again to publish.');
+                    } else {
+                        showMessage('Could not publish: ' + (xhr.responseJSON?.message || xhr.statusText));
+                    }
+                    $('#submitBtn').prop('disabled', false).text('Publish');
+                }
+            });
         });
     });
 </script>

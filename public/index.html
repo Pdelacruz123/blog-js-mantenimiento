@@ -8,6 +8,7 @@
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/quill@2.0.3/dist/quill.snow.css">
     <link rel="stylesheet" href="css/app.css">
     <!-- Applies the saved theme and palette before first paint, and adds the appearance picker -->
     <script src="js/theme.js"></script>
@@ -32,6 +33,7 @@
             <input type="search" id="searchInput" placeholder="Search posts or authors..." aria-label="Search posts" autocomplete="off">
         </div>
     </div>
+    <div id="tagBar" class="tag-bar" hidden></div>
     <p id="searchSummary" class="search-summary" hidden></p>
     <div id="postsContainer"></div>
     <div class="load-more-wrap">
@@ -50,8 +52,16 @@
                 <input type="text" id="editTitle" class="form-control" required>
             </div>
             <div class="form-group">
-                <label for="editContent">Content</label>
-                <textarea id="editContent" class="form-control" rows="5" required></textarea>
+                <label>Content</label>
+                <div id="editContent"></div>
+                <div class="editor-meta"><span id="editWordCount"></span></div>
+            </div>
+            <div class="form-group">
+                <label for="editTagsInput">Tags</label>
+                <div class="tag-input" id="editTagBox">
+                    <input type="text" id="editTagsInput" list="editTagSuggestions" autocomplete="off">
+                </div>
+                <datalist id="editTagSuggestions"></datalist>
             </div>
             <div class="form-group">
                 <label>Image</label>
@@ -75,7 +85,11 @@
 </div>
 
 <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/dompurify/3.1.6/purify.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/quill@2.0.3/dist/quill.js"></script>
 <script src="js/common.js"></script>
+<script src="js/editor.js"></script>
+<script src="js/navbar.js"></script>
 <script src="js/notifications.js"></script>
 <script>
     $(document).ready(function() {
@@ -107,40 +121,20 @@
             `;
         }
 
-        if (token) {
-            // Show New Post and Logout buttons if logged in
-            $('#authButtons').html(`
-                <button id="newPostBtn" class="btn btn-light mx-1">+ New Post</button>
-                <a href="${profileUrl(userId)}" class="btn btn-outline-light mx-1">My Profile</a>
-                <a href="edit-profile.html" class="btn btn-outline-light mx-1">Edit Profile</a>
-                <button id="logoutBtn" class="btn btn-outline-light mx-1">Logout</button>
-            `);
-        } else {
-            // Show Register and Login buttons if not logged in
-            $('#authButtons').html(`
-                <a href="register.html" class="btn btn-light mx-1">Register</a>
-                <a href="login.html" class="btn btn-outline-light mx-1">Login</a>
-            `);
-        }
-
-        // Event handler for New Post button
-        $('#authButtons').on('click', '#newPostBtn', function() {
-            window.location.href = 'create-post.html';
-        });
-
-        // Event handler for Logout button
-        $('#authButtons').on('click', '#logoutBtn', function() {
-            localStorage.removeItem('token');
-            localStorage.removeItem('userId');
-            location.reload(); // Reload to update UI
-        });
+        // Profile, logout, etc. are in the top menu (js/navbar.js); the hero keeps the main call to action
+        $('#authButtons').html(token
+            ? '<a href="create-post.html" class="btn btn-light mx-1">+ Write a post</a>'
+            : `<a href="register.html" class="btn btn-light mx-1">Register</a>
+               <a href="login.html" class="btn btn-outline-light mx-1">Login</a>`);
 
         // ------------------------------------------------------------------
         // Feed: search and pagination
         // ------------------------------------------------------------------
         const PAGE_SIZE = 5;
         // postId: set when opened through a shared link (index.html?post=ID) to show only that post
-        const feed = { query: '', sort: 'new', postId: new URLSearchParams(location.search).get('post'), offset: 0, total: 0, requestId: 0 };
+        // tag: set by clicking a tag or opening index.html?tag=NAME
+        const urlParams = new URLSearchParams(location.search);
+        const feed = { query: '', sort: 'new', tag: urlParams.get('tag') || '', postId: urlParams.get('post'), offset: 0, total: 0, requestId: 0 };
         const postsById = {}; // loaded posts, used by the share buttons
 
         function postHtml(post) {
@@ -153,7 +147,7 @@
                             <a href="${profileUrl(post.author_id)}" class="avatar-link" title="View profile">${avatar(post.author, post.author_picture)}</a>
                             <div class="meta">
                                 <a href="${profileUrl(post.author_id)}" class="post-author author-link">${highlight(post.author, feed.query)}</a>
-                                <div class="post-date" title="${new Date(post.created_at).toLocaleString()}">${timeAgo(post.created_at)}</div>
+                                <div class="post-date"><span title="${new Date(post.created_at).toLocaleString()}">${timeAgo(post.created_at)}</span> <span class="post-reading">&middot; ${readingTime(post.content)}</span></div>
                             </div>
                             ${isOwner ? `
                             <div class="post-actions">
@@ -163,7 +157,8 @@
                         </div>
 
                         <h5 class="card-title">${highlight(post.title, feed.query)}</h5>
-                        <p class="card-text">${highlight(post.content, feed.query)}</p>
+                        ${tagChips(post.tags, true)}
+                        ${postBodyHtml(post.content)}
                         ${post.image_url ? `<img class="post-image" src="${esc(post.image_url)}" alt="">` : ''}
 
                         <div class="share-row">
@@ -193,6 +188,13 @@
             `;
         }
 
+        // Post card element with the search terms highlighted (also inside formatted content)
+        function renderPost(post) {
+            const card = $(postHtml(post));
+            card.find('.post-body').each(function() { highlightIn(this, feed.query); });
+            return card;
+        }
+
         function emptyStateHtml() {
             if (feed.postId) {
                 return `
@@ -201,11 +203,12 @@
                     </div>
                 `;
             }
-            if (feed.query) {
+            if (feed.query || feed.tag) {
+                const what = [feed.query && `match &ldquo;${esc(feed.query)}&rdquo;`, feed.tag && `are tagged #${esc(feed.tag)}`].filter(Boolean).join(' and ');
                 return `
                     <div class="empty-state">
                         <div class="icon">&#128269;</div>
-                        <p class="mb-0 mt-2">No posts match &ldquo;${esc(feed.query)}&rdquo;. Try another word.</p>
+                        <p class="mb-0 mt-2">No posts ${what}. Try another search or tag.</p>
                     </div>
                 `;
             }
@@ -225,9 +228,13 @@
             const summary = $('#searchSummary');
             if (feed.postId) {
                 summary.html('Showing a single post. <a href="index.html">See all posts</a>').prop('hidden', false);
-            } else if (feed.query) {
-                summary.html(`<b>${feed.total}</b> result${feed.total === 1 ? '' : 's'} for &ldquo;${esc(feed.query)}&rdquo;
-                    <a href="#" id="clearSearch">Clear search</a>`).prop('hidden', false);
+            } else if (feed.query || feed.tag) {
+                const parts = [];
+                if (feed.query) parts.push(`for &ldquo;${esc(feed.query)}&rdquo;`);
+                if (feed.tag) parts.push(`tagged <b>#${esc(feed.tag)}</b>`);
+                summary.html(`<b>${feed.total}</b> post${feed.total === 1 ? '' : 's'} ${parts.join(' ')}
+                    ${feed.query ? '<a href="#" id="clearSearch">Clear search</a>' : ''}
+                    ${feed.tag ? '<a href="#" id="clearTag">Clear tag</a>' : ''}`).prop('hidden', false);
             } else {
                 summary.prop('hidden', true);
             }
@@ -243,7 +250,7 @@
                 url: feed.postId ? `/api/posts/${encodeURIComponent(feed.postId)}` : '/api/posts',
                 headers: headers,
                 type: 'GET',
-                data: feed.postId ? {} : { q: feed.query, sort: feed.sort, limit: PAGE_SIZE, offset: feed.offset },
+                data: feed.postId ? {} : { q: feed.query, tag: feed.tag, sort: feed.sort, limit: PAGE_SIZE, offset: feed.offset },
                 success: function(data, status, xhr) {
                     if (requestId !== feed.requestId) return; // a newer search already replaced this one
                     const posts = feed.postId ? [data] : data;
@@ -253,7 +260,7 @@
                         $('#postsContainer').html(emptyStateHtml());
                     }
                     posts.forEach(post => {
-                        $('#postsContainer').append(postHtml(post));
+                        $('#postsContainer').append(renderPost(post));
                         loadComments(post.id);
                     });
                     feed.offset += posts.length;
@@ -286,6 +293,40 @@
         });
 
         // ------------------------------------------------------------------
+        // Tags: trending bar above the feed; clicking any tag filters the feed
+        // ------------------------------------------------------------------
+        function renderTagBar(rows) {
+            if (!rows.length) return $('#tagBar').prop('hidden', true);
+            $('#tagBar').html('<span class="label">Trending:</span>' + rows.map(r => `
+                <a class="tag-chip${r.tag === feed.tag ? ' active' : ''}" href="index.html?tag=${encodeURIComponent(r.tag)}" data-tag="${esc(r.tag)}">
+                    #${esc(r.tag)} <span class="count">${r.count}</span>
+                </a>`).join('')).prop('hidden', false);
+        }
+        let trendingTags = [];
+        $.get('/api/tags', function(rows) {
+            trendingTags = rows;
+            renderTagBar(rows);
+        });
+
+        function setTag(tag) {
+            feed.tag = feed.tag === tag ? '' : tag; // clicking the active tag clears the filter
+            showAllPosts();
+            history.replaceState(null, '', feed.tag ? `index.html?tag=${encodeURIComponent(feed.tag)}` : 'index.html');
+            renderTagBar(trendingTags);
+            loadPosts(true);
+            $('html, body').animate({ scrollTop: $('.feed').offset().top - 70 }, 200);
+        }
+
+        $('#postsContainer, #tagBar').on('click', '.tag-chip[data-tag]', function(e) {
+            e.preventDefault();
+            setTag($(this).attr('data-tag'));
+        });
+        $('#searchSummary').on('click', '#clearTag', function(e) {
+            e.preventDefault();
+            setTag(feed.tag);
+        });
+
+        // ------------------------------------------------------------------
         // Share a post. Facebook is a plain share link. Instagram has no web share URL:
         // on phones the native share sheet (with the post image) lets you pick Instagram;
         // elsewhere the caption is copied and Instagram opens so it can be pasted.
@@ -307,7 +348,8 @@
         $('#postsContainer').on('click', '.shareInstagramBtn', async function() {
             const button = $(this);
             const post = postsById[button.closest('.post-card').data('post-id')];
-            const caption = `${post.title}\n\n${post.content}\n\n${postUrl(post.id)}`;
+            const hashtags = (post.tags || []).map(t => '#' + t.replace(/-/g, '')).join(' ');
+            const caption = `${post.title}\n\n${plainText(post.content)}\n\n${hashtags ? hashtags + '\n\n' : ''}${postUrl(post.id)}`;
 
             // Desktop share sheets (Windows/macOS) don't list Instagram, so only use it on touch devices
             if (navigator.share && matchMedia('(pointer: coarse)').matches) {
@@ -482,6 +524,8 @@
         // Edit post dialog
         // ------------------------------------------------------------------
         const edit = { postId: null, file: null, removeImage: false };
+        const editEditor = token ? createEditor('#editContent', '#editWordCount') : null;
+        const editTags = token ? createTagInput('#editTagBox') : null;
 
         function renderEditImage(src) {
             $('#editImagePreview').html(src ? `<img src="${esc(src)}" alt="">` : '<div class="no-image">No image</div>');
@@ -493,7 +537,8 @@
             edit.file = null;
             edit.removeImage = false;
             $('#editTitle').val(post.title);
-            $('#editContent').val(post.content);
+            editEditor.setContent(post.content);
+            editTags.set(post.tags);
             $('#editImageInput').val('');
             $('#editError').text('');
             renderEditImage(post.image_url);
@@ -509,7 +554,7 @@
         // Re-render a single post in place after it was edited
         function refreshPost(postId) {
             $.get(`/api/posts/${postId}`, function(post) {
-                const updated = $(postHtml(post)).addClass('just-updated');
+                const updated = renderPost(post).addClass('just-updated');
                 $(`.post-card[data-post-id="${postId}"]`).replaceWith(updated);
                 loadComments(postId);
             });
@@ -557,9 +602,14 @@
         $('#editPostForm').on('submit', function(e) {
             e.preventDefault();
             const postId = edit.postId;
+            if (editEditor.isEmpty()) {
+                $('#editError').text('The post content cannot be empty.');
+                return;
+            }
             const formData = new FormData();
             formData.append('title', $('#editTitle').val());
-            formData.append('content', $('#editContent').val());
+            formData.append('content', editEditor.getHtml());
+            formData.append('tags', editTags.get().join(','));
             if (edit.file) formData.append('image', edit.file);
             else if (edit.removeImage) formData.append('remove_image', 'true');
 
