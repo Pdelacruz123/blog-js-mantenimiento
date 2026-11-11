@@ -17,6 +17,7 @@ CREATE TABLE posts (
   title TEXT NOT NULL,
   content TEXT NOT NULL,
   image_url TEXT,
+  tags TEXT[] NOT NULL DEFAULT '{}',
   author_id INTEGER REFERENCES users(id),
   created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
@@ -29,3 +30,5 @@ CREATE TABLE comments (
   author_id INTEGER REFERENCES users(id) ON DELETE CASCADE,
   created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
+
+CREATE INDEX posts_tags_idx ON posts USING GIN (tags);

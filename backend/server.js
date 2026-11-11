@@ -7,6 +7,7 @@ const { Pool } = require('pg');
 const multer = require('multer');
 const path = require('path');
 const fs = require('fs');
+const { parseTags, plainText } = require('./tags');
 
 const app = express();
 const port = process.env.PORT || 5001;
@@ -243,16 +244,18 @@ app.get('/api/users/:id', async (req, res) => {
 });
 
 // Create a new post (optionally with an image)
+// content is the HTML from the rich-text editor; the browser sanitizes it (DOMPurify) when rendering.
 app.post('/api/posts', authenticateToken, handleUpload(uploadPostImage.single('image')), async (req, res) => {
     const { title, content } = req.body;
-    if (!title || !title.trim() || !content || !content.trim()) {
+    const imageUrl = req.file ? `/uploads/posts/${req.file.filename}` : null;
+    if (!title || !title.trim() || !plainText(content)) {
+        removeUploadedFile(imageUrl);
         return res.status(400).json({ message: 'Title and content are required' });
     }
     try {
-        const imageUrl = req.file ? `/uploads/posts/${req.file.filename}` : null;
         const result = await pool.query(
-            'INSERT INTO posts (title, content, author_id, image_url) VALUES ($1, $2, $3, $4) RETURNING *',
-            [title.trim(), content.trim(), req.user.userId, imageUrl]
+            'INSERT INTO posts (title, content, author_id, image_url, tags) VALUES ($1, $2, $3, $4, $5) RETURNING *',
+            [title.trim(), content.trim(), req.user.userId, imageUrl, parseTags(req.body.tags) || []]
         );
         res.status(201).json(result.rows[0]);
     } catch (err) {
@@ -263,7 +266,7 @@ app.post('/api/posts', authenticateToken, handleUpload(uploadPostImage.single('i
 
 // Post fields returned by the API, with author info and per-post comment/rating stats
 const POST_COLUMNS = `
-    posts.id, posts.title, posts.content, posts.image_url, posts.created_at, posts.author_id,
+    posts.id, posts.title, posts.content, posts.image_url, posts.tags, posts.created_at, posts.author_id,
     users.username AS author, users.profile_picture AS author_picture,
     (SELECT COUNT(*) FROM comments WHERE comments.post_id = posts.id)::int AS comment_count,
     (SELECT COUNT(rating) FROM comments WHERE comments.post_id = posts.id)::int AS rating_count,
@@ -276,8 +279,8 @@ const POST_SORTS = {
 };
 
 // Get posts with author name and profile picture, newest first.
-// Optional query params: q (search in title, content and author), author (user id), limit/offset (pagination),
-// sort (new | top | comments).
+// Optional query params: q (search in title, content, author and tags), author (user id), tag,
+// limit/offset (pagination), sort (new | top | comments).
 // The total number of matching posts is returned in the X-Total-Count header.
 app.get('/api/posts', async (req, res) => {
     const limit = Math.min(Math.max(parseInt(req.query.limit, 10) || 10, 1), 50);
@@ -290,13 +293,22 @@ app.get('/api/posts', async (req, res) => {
     if (search) {
         // Escape LIKE wildcards so "%" or "_" typed by the user are matched literally
         params.push(`%${search.replace(/[\\%_]/g, '\\$&')}%`);
-        conditions.push(`(posts.title ILIKE $${params.length} OR posts.content ILIKE $${params.length} OR users.username ILIKE $${params.length})`);
+        // Content is HTML: search only its text, so words like "strong" don't match every formatted post
+        conditions.push(`(posts.title ILIKE $${params.length}
+            OR regexp_replace(posts.content, '<[^>]*>', ' ', 'g') ILIKE $${params.length}
+            OR users.username ILIKE $${params.length}
+            OR array_to_string(posts.tags, ' ') ILIKE $${params.length})`);
     }
     if (req.query.author !== undefined) {
         const authorId = Number(req.query.author);
         if (!Number.isInteger(authorId)) return res.status(400).json({ message: 'Invalid author id' });
         params.push(authorId);
         conditions.push(`posts.author_id = $${params.length}`);
+    }
+    const tag = (parseTags(req.query.tag) || [])[0];
+    if (tag) {
+        params.push(tag);
+        conditions.push(`$${params.length} = ANY(posts.tags)`);
     }
     const where = conditions.length ? `WHERE ${conditions.join(' AND ')}` : '';
 
@@ -320,6 +332,23 @@ app.get('/api/posts', async (req, res) => {
     }
 });
 
+
+// Most used tags, with how many posts have each one
+app.get('/api/tags', async (req, res) => {
+    try {
+        const result = await pool.query(`
+            SELECT tag, COUNT(*)::int AS count
+            FROM posts, unnest(posts.tags) AS tag
+            GROUP BY tag
+            ORDER BY count DESC, tag
+            LIMIT 12
+        `);
+        res.json(result.rows);
+    } catch (err) {
+        console.error("Error fetching tags:", err);
+        res.status(500).json({ message: 'Server error' });
+    }
+});
 
 // Get a single post by ID
 app.get('/api/posts/:id', async (req, res) => {
@@ -347,7 +376,7 @@ app.put('/api/posts/:id', authenticateToken, handleUpload(uploadPostImage.single
     const removeImage = req.body.remove_image === true || req.body.remove_image === 'true';
     const newImageUrl = req.file ? `/uploads/posts/${req.file.filename}` : null;
 
-    if (!title || !title.trim() || !content || !content.trim()) {
+    if (!title || !title.trim() || !plainText(content)) {
         removeUploadedFile(newImageUrl);
         return res.status(400).json({ message: 'Title and content are required' });
     }
@@ -366,9 +395,10 @@ app.put('/api/posts/:id', authenticateToken, handleUpload(uploadPostImage.single
         }
 
         const imageUrl = newImageUrl || (removeImage ? null : post.image_url);
+        const tags = parseTags(req.body.tags) || post.tags; // tags not sent: keep the current ones
         const result = await pool.query(
-            'UPDATE posts SET title = $1, content = $2, image_url = $3 WHERE id = $4 RETURNING *',
-            [title.trim(), content.trim(), imageUrl, req.params.id]
+            'UPDATE posts SET title = $1, content = $2, image_url = $3, tags = $4 WHERE id = $5 RETURNING *',
+            [title.trim(), content.trim(), imageUrl, tags, req.params.id]
         );
 
         // The old image is no longer referenced once it was replaced or removed
