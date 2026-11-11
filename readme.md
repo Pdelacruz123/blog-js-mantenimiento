@@ -40,7 +40,15 @@ Otros cambios que aparecen en el código:
 - **Recuperación de contraseña:** existe el enlace en el login y la pantalla `forgot-password.html`, pero no hay endpoint en el backend.
 - **Base de datos:** `database.sql` ahora crea el esquema completo, y `migrations/` actualiza una base creada con el esquema original.
 - **Dependencias:** se añadió `multer` para subir archivos.
-- **Servidor:** `server.js` pasó de unas 190 líneas con 7 endpoints a unos 570 con 16.
+- **Servidor:** `server.js` pasó de unas 190 líneas con 7 endpoints a unas 600 con 17.
+
+### Mejoras de interfaz (noviembre de 2026)
+
+- **Editor de texto enriquecido:** al crear o editar un post se puede usar negrita, cursiva, subrayado, tachado, títulos, tamaño de letra, color, listas, alineación, citas, bloques de código y enlaces (editor [Quill](https://quilljs.com/)). Los posts se guardan como HTML y se muestran filtrados con [DOMPurify](https://github.com/cure53/DOMPurify), que solo deja las etiquetas que genera el editor. Los posts antiguos, en texto plano, se siguen viendo igual.
+- **Etiquetas en los posts:** hasta 5 por post (`#javascript`, `#viajes`...). Se muestran en cada post y al hacer clic filtran el feed. Encima del feed hay una barra de etiquetas populares, y la búsqueda también encuentra posts por etiqueta (migración `003`).
+- **Menú superior:** barra fija en todas las pantallas principales con Inicio, Nuevo post, Mi perfil, Editar perfil, un desplegable de etiquetas, iniciar/cerrar sesión, las notificaciones y el selector de tema. En el celular se vuelve un menú hamburguesa.
+- **Tiempo de lectura y contador de palabras:** cada post muestra "N min read", y el editor cuenta las palabras mientras se escribe.
+- **Pantallas rediseñadas:** "Nuevo post" y "Editar perfil" usan ahora el mismo estilo y el tema claro/oscuro del resto del blog. Al publicar, se abre directamente el post creado.
 
 ## Requisitos
 
@@ -74,7 +82,7 @@ psql -U postgres -c "CREATE DATABASE blog_app;"
 psql -U postgres -d blog_app -f database.sql
 ```
 
-Si ya tienes una base creada con el esquema original, ejecuta en orden `migrations/001_profile_images_ratings.sql` y `migrations/002_profile_extra_notifications.sql`. Se pueden repetir sin problema.
+Si ya tienes una base creada con el esquema original, ejecuta en orden `migrations/001_profile_images_ratings.sql`, `migrations/002_profile_extra_notifications.sql` y `migrations/003_post_tags.sql`. Se pueden repetir sin problema.
 
 **3. Ejecutar.** Hazlo desde `backend/`, porque el servidor busca `../public` desde esa carpeta:
 
@@ -89,6 +97,7 @@ Abre `http://localhost:5001`. La carpeta `backend/uploads/` se crea sola.
 ```
 ├── backend/
 │   ├── server.js          # Servidor Express y API
+│   ├── tags.js            # Normaliza etiquetas (pruebas: npm test)
 │   ├── database.sql       # Esquema completo
 │   ├── migrations/        # Para bases creadas con el esquema original
 │   ├── .env.example       # Plantilla de variables de entorno
@@ -104,7 +113,8 @@ Abre `http://localhost:5001`. La carpeta `backend/uploads/` se crea sola.
 
 - **Autenticación:** `POST /api/register`, `POST /api/login`
 - **Perfil:** `GET /api/profile`, `PUT /api/profile` (con sesión), `GET /api/users/:id` (público)
-- **Posts:** `GET /api/posts` (parámetros `q`, `author`, `limit`, `offset`, `sort`; total en el header `X-Total-Count`), `GET /api/posts/:id`, `POST /api/posts`, `PUT /api/posts/:id`, `DELETE /api/posts/:id` (las tres últimas, con sesión; editar y borrar solo el autor)
+- **Etiquetas:** `GET /api/tags` (las 12 más usadas, con su cantidad)
+- **Posts:** `GET /api/posts` (parámetros `q`, `author`, `tag`, `limit`, `offset`, `sort`; total en el header `X-Total-Count`), `GET /api/posts/:id`, `POST /api/posts`, `PUT /api/posts/:id`, `DELETE /api/posts/:id` (las tres últimas, con sesión; editar y borrar solo el autor)
 - **Comentarios:** `GET` y `POST /api/posts/:id/comments`, `DELETE /api/comments/:id`
 - **Notificaciones:** `GET /api/notifications`, `POST /api/notifications/read`, `GET /api/notifications/stream?token=JWT`
 
